@@ -4,8 +4,12 @@ import android.os.Bundle
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
-import com.example.notes_manager.core.network.*
+import com.example.notes_manager.core.network.Network
+import com.example.notes_manager.core.network.rawGet
 import kotlinx.coroutines.launch
+import okhttp3.Request
+import java.net.UnknownHostException
+import java.io.IOException
 
 class MainActivity : AppCompatActivity() {
 
@@ -19,68 +23,66 @@ class MainActivity : AppCompatActivity() {
         lifecycleScope.launch {
             val out = StringBuilder()
 
-            // 1) POST — создать запись
-            run {
-                val payload = """
-                    {
-                      "title": "hello",
-                      "body": "from android",
-                      "userId": 1
+            // A) sanity: простая проверка, что вообще есть сеть и DNS работает
+            try {
+                val ping = rawGet(this@MainActivity, "https://example.com")
+                out.appendLine("✓ Подключение есть: example.com -> code=${ping.code}")
+            } catch (e: UnknownHostException) {
+                tv.text = "Нет интернета или DNS ломается: ${e.message}"
+                return@launch
+            } catch (e: IOException) {
+                tv.text = "Ошибка сети при базовой проверке: ${e.message}"
+                return@launch
+            }
+            out.appendLine()
+
+            // 1) Первый запрос: получаем ETag
+            try {
+                val first = rawGet(this@MainActivity, "https://httpbin.org/cache")
+                val etag = first.headers["ETag"]
+                out.appendLine("1) /cache -> code=${first.code}")
+                out.appendLine("   ETag: $etag")
+                out.appendLine("   Тело(50): ${first.body.take(50)}")
+                out.appendLine()
+
+                // 2) Второй запрос с If-None-Match
+                if (etag != null) {
+                    val client = Network.client(this@MainActivity)
+                    val req = Request.Builder()
+                        .url("https://httpbin.org/cache")
+                        .get()
+                        .header("If-None-Match", etag)
+                        .build()
+                    client.newCall(req).execute().use { resp ->
+                        out.appendLine("2) If-None-Match -> code=${resp.code}")
+                        if (resp.code == 304) {
+                            out.appendLine("   304 Not Modified")
+                        } else {
+                            out.appendLine("   Тело(50): ${resp.body?.string().orEmpty().take(50)}")
+                        }
+                        out.appendLine()
                     }
-                """.trimIndent()
-
-                val res = postJson(
-                    context = this@MainActivity,
-                    url = "https://httpbin.org/anything",
-                    payloadJson = """{ "check": "token" }"""
-                )
-                out.appendLine("POST /posts -> ${res.code}")
-                out.appendLine(res.bodyFirst200)
+                } else {
+                    out.appendLine("2) ETag не пришёл, тест If-None-Match пропускаем")
+                    out.appendLine()
+                }
+            } catch (e: IOException) {
+                out.appendLine("Ошибка сети на шаге 1/2: ${e.message}")
                 out.appendLine()
             }
 
-            // 2) PUT — полная замена
-            run {
-                val payload = """
-                    {
-                      "id": 1,
-                      "title": "updated via PUT",
-                      "body": "full replace",
-                      "userId": 1
-                    }
-                """.trimIndent()
-
-                val res = putJson(
-                    context = this@MainActivity,
-                    url = "https://jsonplaceholder.typicode.com/posts/1",
-                    payloadJson = payload
-                )
-                out.appendLine("PUT /posts/1 -> ${res.code}")
-                out.appendLine(res.bodyFirst200)
+            // 3) Cache-Control: кэш на 5 секунд
+            try {
+                val firstCache = rawGet(this@MainActivity, "https://httpbin.org/cache/5")
+                out.appendLine("3) cache/5: первый -> code=${firstCache.code}")
+                out.appendLine("   Тело(50): ${firstCache.body.take(50)}")
+                val secondCache = rawGet(this@MainActivity, "https://httpbin.org/cache/5")
+                out.appendLine("   второй -> code=${secondCache.code}")
+                out.appendLine("   Тело(50): ${secondCache.body.take(50)}")
                 out.appendLine()
-            }
-
-            // 3) PATCH — частичное обновление
-            run {
-                val payload = """{ "title": "patched title" }"""
-                val res = patchJson(
-                    context = this@MainActivity,
-                    url = "https://jsonplaceholder.typicode.com/posts/1",
-                    payloadJson = payload
-                )
-                out.appendLine("PATCH /posts/1 -> ${res.code}")
-                out.appendLine(res.bodyFirst200)
+            } catch (e: IOException) {
+                out.appendLine("Ошибка сети на шаге 3: ${e.message}")
                 out.appendLine()
-            }
-
-            // 4) DELETE — удаление
-            run {
-                val code = deleteRequest(
-                    context = this@MainActivity,
-                    url = "https://jsonplaceholder.typicode.com/posts/1"
-                )
-                out.appendLine("DELETE /posts/1 -> $code")
-                out.appendLine("(ожидай 200 или 204; тело обычно пустое)")
             }
 
             tv.text = out.toString()
