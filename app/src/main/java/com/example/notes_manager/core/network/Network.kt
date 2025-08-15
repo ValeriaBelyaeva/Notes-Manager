@@ -11,9 +11,7 @@ import java.util.concurrent.TimeUnit
 object Network {
     fun client(context: Context): OkHttpClient {
         val logging = HttpLoggingInterceptor().apply {
-            val logging = HttpLoggingInterceptor().apply {
-                level = HttpLoggingInterceptor.Level.BODY
-            }
+            level = HttpLoggingInterceptor.Level.BODY
         }
         val cacheDir = File(context.cacheDir, "http-cache")
         return OkHttpClient.Builder()
