@@ -11,8 +11,9 @@ import java.util.concurrent.TimeUnit
 object Network {
     fun client(context: Context): OkHttpClient {
         val logging = HttpLoggingInterceptor().apply {
-            // BODY включай только когда реально отлаживаешься
-            level = HttpLoggingInterceptor.Level.BASIC
+            val logging = HttpLoggingInterceptor().apply {
+                level = HttpLoggingInterceptor.Level.BODY
+            }
         }
         val cacheDir = File(context.cacheDir, "http-cache")
         return OkHttpClient.Builder()
@@ -20,6 +21,8 @@ object Network {
             .readTimeout(15, TimeUnit.SECONDS)
             .writeTimeout(15, TimeUnit.SECONDS)
             .cache(Cache(cacheDir, 10L * 1024 * 1024)) // 10 MB
+            // TODO: заменить на реальный токен или null
+            .addInterceptor( AuthInterceptor { "my-secret-token"} )
             .addInterceptor(logging)
             .build()
     }

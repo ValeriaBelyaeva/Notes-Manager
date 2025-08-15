@@ -4,14 +4,8 @@ import android.os.Bundle
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
-import com.example.notes_manager.core.network.debugGet
-import com.example.notes_manager.core.network.parseRetryAfterMillis
-import com.example.notes_manager.core.network.rawGet
+import com.example.notes_manager.core.network.*
 import kotlinx.coroutines.launch
-import okhttp3.HttpUrl
-import java.time.ZoneOffset
-import java.time.ZonedDateTime
-import java.time.format.DateTimeFormatter
 
 class MainActivity : AppCompatActivity() {
 
@@ -25,44 +19,68 @@ class MainActivity : AppCompatActivity() {
         lifecycleScope.launch {
             val out = StringBuilder()
 
-            // A) Убедиться, что debugGet падает на !2xx с понятной ошибкой
+            // 1) POST — создать запись
             run {
-                try {
-                    debugGet(this@MainActivity, "https://httpbin.org/status/404")
-                    out.appendLine("Ожидали ошибку 404, но её нет")
-                } catch (t: Throwable) {
-                    out.appendLine("404 отловлен: ${t.message}")
-                }
+                val payload = """
+                    {
+                      "title": "hello",
+                      "body": "from android",
+                      "userId": 1
+                    }
+                """.trimIndent()
+
+                val res = postJson(
+                    context = this@MainActivity,
+                    url = "https://httpbin.org/anything",
+                    payloadJson = """{ "check": "token" }"""
+                )
+                out.appendLine("POST /posts -> ${res.code}")
+                out.appendLine(res.bodyFirst200)
                 out.appendLine()
             }
 
-            // B) Retry-After: число секунд
+            // 2) PUT — полная замена
             run {
-                val url = "https://httpbin.org/response-headers?Retry-After=5&status=429"
-                val raw = rawGet(this@MainActivity, url)
-                val ra = parseRetryAfterMillis(raw.headers)
-                out.appendLine("429 (seconds) code=${raw.code}, Retry-After(ms)=$ra")
+                val payload = """
+                    {
+                      "id": 1,
+                      "title": "updated via PUT",
+                      "body": "full replace",
+                      "userId": 1
+                    }
+                """.trimIndent()
+
+                val res = putJson(
+                    context = this@MainActivity,
+                    url = "https://jsonplaceholder.typicode.com/posts/1",
+                    payloadJson = payload
+                )
+                out.appendLine("PUT /posts/1 -> ${res.code}")
+                out.appendLine(res.bodyFirst200)
                 out.appendLine()
             }
 
-            // C) Retry-After: HTTP‑date (на 7 секунд вперёд)
+            // 3) PATCH — частичное обновление
             run {
-                val futureHttpDate = ZonedDateTime.now(ZoneOffset.UTC)
-                    .plusSeconds(7)
-                    .format(DateTimeFormatter.RFC_1123_DATE_TIME)
+                val payload = """{ "title": "patched title" }"""
+                val res = patchJson(
+                    context = this@MainActivity,
+                    url = "https://jsonplaceholder.typicode.com/posts/1",
+                    payloadJson = payload
+                )
+                out.appendLine("PATCH /posts/1 -> ${res.code}")
+                out.appendLine(res.bodyFirst200)
+                out.appendLine()
+            }
 
-                val httpUrl = HttpUrl.Builder()
-                    .scheme("https")
-                    .host("httpbin.org")
-                    .addPathSegments("response-headers")
-                    .addQueryParameter("Retry-After", futureHttpDate)
-                    .addQueryParameter("status", "429")
-                    .build()
-
-                val raw = rawGet(this@MainActivity, httpUrl.toString())
-                val ra = parseRetryAfterMillis(raw.headers)
-                out.appendLine("429 (date) code=${raw.code}, Retry-After(ms)=$ra")
-                out.appendLine("Header: ${raw.headers["Retry-After"]}")
+            // 4) DELETE — удаление
+            run {
+                val code = deleteRequest(
+                    context = this@MainActivity,
+                    url = "https://jsonplaceholder.typicode.com/posts/1"
+                )
+                out.appendLine("DELETE /posts/1 -> $code")
+                out.appendLine("(ожидай 200 или 204; тело обычно пустое)")
             }
 
             tv.text = out.toString()
