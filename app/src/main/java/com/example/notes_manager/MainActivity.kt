@@ -4,8 +4,10 @@ import android.os.Bundle
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
-import com.example.notes_manager.core.network.*
+import com.example.notes_manager.core.network.Network
+import com.example.notes_manager.core.network.rawGet
 import kotlinx.coroutines.launch
+import okhttp3.Request
 
 class MainActivity : AppCompatActivity() {
 
@@ -19,68 +21,50 @@ class MainActivity : AppCompatActivity() {
         lifecycleScope.launch {
             val out = StringBuilder()
 
-            // 1) POST — создать запись
-            run {
-                val payload = """
-                    {
-                      "title": "hello",
-                      "body": "from android",
-                      "userId": 1
+            // 1) Первый запрос: получаем ETag
+            val first = rawGet(this@MainActivity, "https://httpbin.org/cache")
+            val etag = first.headers["ETag"]
+            out.appendLine("1) Первый запрос /cache -> code=${first.code}")
+            out.appendLine("   ETag: $etag")
+            out.appendLine("   Первые 50 символов тела: ${first.body.take(50)}")
+            out.appendLine()
+
+            // 2) Второй запрос с If-None-Match
+            if (etag != null) {
+                val client = Network.client(this@MainActivity)
+                val req = Request.Builder()
+                    .url("https://httpbin.org/cache")
+                    .get()
+                    .header("If-None-Match", etag)
+                    .build()
+
+                client.newCall(req).execute().use { resp ->
+                    out.appendLine("2) Повтор с If-None-Match -> code=${resp.code}")
+                    if (resp.code == 304) {
+                        out.appendLine("   Ответ: 304 Not Modified (тело не присылается)")
+                    } else {
+                        out.appendLine("   Тело (первые 50): ${resp.body?.string().orEmpty().take(50)}")
                     }
-                """.trimIndent()
-
-                val res = postJson(
-                    context = this@MainActivity,
-                    url = "https://httpbin.org/anything",
-                    payloadJson = """{ "check": "token" }"""
-                )
-                out.appendLine("POST /posts -> ${res.code}")
-                out.appendLine(res.bodyFirst200)
+                    out.appendLine()
+                }
+            } else {
+                out.appendLine("2) Сервер не прислал ETag, пропускаем If-None-Match тест")
                 out.appendLine()
             }
 
-            // 2) PUT — полная замена
+            // 3) Cache-Control: ответ кэшируется 5 секунд
             run {
-                val payload = """
-                    {
-                      "id": 1,
-                      "title": "updated via PUT",
-                      "body": "full replace",
-                      "userId": 1
-                    }
-                """.trimIndent()
+                val firstCache = rawGet(this@MainActivity, "https://httpbin.org/cache/5")
+                out.appendLine("3) Cache-Control тест (5 сек): первый -> code=${firstCache.code}")
+                out.appendLine("   Тело (первые 50): ${firstCache.body.take(50)}")
 
-                val res = putJson(
-                    context = this@MainActivity,
-                    url = "https://jsonplaceholder.typicode.com/posts/1",
-                    payloadJson = payload
-                )
-                out.appendLine("PUT /posts/1 -> ${res.code}")
-                out.appendLine(res.bodyFirst200)
+                // Второй запрос сразу после первого — при корректной настройке кэша OkHttp
+                // иногда отдаст тот же контент. Код может по-прежнему быть 200 (это нормально).
+                val secondCache = rawGet(this@MainActivity, "https://httpbin.org/cache/5")
+                out.appendLine("   второй -> code=${secondCache.code}")
+                out.appendLine("   Тело (первые 50): ${secondCache.body.take(50)}")
                 out.appendLine()
-            }
-
-            // 3) PATCH — частичное обновление
-            run {
-                val payload = """{ "title": "patched title" }"""
-                val res = patchJson(
-                    context = this@MainActivity,
-                    url = "https://jsonplaceholder.typicode.com/posts/1",
-                    payloadJson = payload
-                )
-                out.appendLine("PATCH /posts/1 -> ${res.code}")
-                out.appendLine(res.bodyFirst200)
-                out.appendLine()
-            }
-
-            // 4) DELETE — удаление
-            run {
-                val code = deleteRequest(
-                    context = this@MainActivity,
-                    url = "https://jsonplaceholder.typicode.com/posts/1"
-                )
-                out.appendLine("DELETE /posts/1 -> $code")
-                out.appendLine("(ожидай 200 или 204; тело обычно пустое)")
+                out.appendLine("Подсказка: чтобы явно использовать дисковый HTTP-кэш, в Network.client уже настроен Cache(10 MB).")
             }
 
             tv.text = out.toString()
