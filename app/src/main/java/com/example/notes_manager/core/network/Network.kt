@@ -15,12 +15,17 @@ object Network {
             level = HttpLoggingInterceptor.Level.BASIC
         }
         val cacheDir = File(context.cacheDir, "http-cache")
+
         return OkHttpClient.Builder()
-            .connectTimeout(20, TimeUnit.SECONDS)
+            .connectTimeout(15, TimeUnit.SECONDS)
             .readTimeout(20, TimeUnit.SECONDS)
             .writeTimeout(20, TimeUnit.SECONDS)
-            .cache(Cache(cacheDir, CACHE_SIZE))
+            .retryOnConnectionFailure(false)   // свой ретрай контролируем сами
+            .addInterceptor(AuthInterceptor { "test-123" }) // можно подменить лямбду реальным токеном
+            .addInterceptor(RetryInterceptor(maxRetries = 1))
             .addInterceptor(logging)
+
+            .cache(Cache(cacheDir, CACHE_SIZE))
             .build()
     }
 }
