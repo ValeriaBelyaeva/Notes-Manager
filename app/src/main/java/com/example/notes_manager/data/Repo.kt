@@ -20,24 +20,30 @@ class Repo(context: Context) {
         RetrofitFactory.retrofit(context, "https://jsonplaceholder.typicode.com/")
             .create(JsonPlaceholderApi::class.java)
 
-    suspend fun loadPost(id: Int): NetResult<PostDto> = safe {
-        api.getPost(id)
-    }
+    suspend fun loadPost(id: Int): NetResult<PostDto> = safe { api.getPost(id) }
 
-    suspend fun createPost(userId: Int, title: String, body: String): NetResult<PostDto> = safe {
-        api.createPost(NewPostRequest(userId, title, body))
-    }
+    suspend fun createPost(userId: Int, title: String, body: String): NetResult<PostDto> =
+        safe { api.createPost(NewPostRequest(userId, title, body)) }
 
     private suspend inline fun <T> safe(crossinline block: suspend () -> T): NetResult<T> {
         return withContext(Dispatchers.IO) {
             try {
                 NetResult.Ok(block())
             } catch (e: HttpException) {
-                NetResult.Err(e.code(), "HTTP ${e.code()}: ${e.message()}")
+                val msg = when (e.code()) {
+                    400 -> "Некорректный запрос"
+                    401 -> "Не авторизовано"
+                    403 -> "Доступ запрещён"
+                    404 -> "Не найдено"
+                    429 -> "Слишком много запросов"
+                    in 500..599 -> "Сервер умер (${e.code()})"
+                    else -> "HTTP ${e.code()}: ${e.message()}"
+                }
+                NetResult.Err(e.code(), msg)
             } catch (e: IOException) {
-                NetResult.Err(null, "I/O: ${e.message}")
+                NetResult.Err(null, "Проблемы с сетью: ${e.message}")
             } catch (e: Throwable) {
-                NetResult.Err(null, "Unexpected: ${e.message}")
+                NetResult.Err(null, "Неожиданная ошибка: ${e.message}")
             }
         }
     }
