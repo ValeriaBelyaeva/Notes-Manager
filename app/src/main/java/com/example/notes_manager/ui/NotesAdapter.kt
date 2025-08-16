@@ -7,23 +7,26 @@ import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
 import com.example.notes_manager.R
-import com.example.notes_manager.domain.Post
+import com.example.notes_manager.domain.Post as DomainPost
 
-class NotesAdapter : ListAdapter<Post, NotesAdapter.VH>(DIFF) {
-    object DIFF : DiffUtil.ItemCallback<Post>() {
-        override fun areItemsTheSame(o: Post, n: Post) = o.id == n.id
-        override fun areContentsTheSame(o: Post, n: Post) = o == n
+class NotesAdapter : ListAdapter<DomainPost, NotesAdapter.VH>(DIFF) {
+
+    object DIFF : DiffUtil.ItemCallback<DomainPost>() {
+        override fun areItemsTheSame(o: DomainPost, n: DomainPost) = o.id == n.id
+        override fun areContentsTheSame(o: DomainPost, n: DomainPost) = o == n
     }
+
     class VH(parent: ViewGroup) : RecyclerView.ViewHolder(
         LayoutInflater.from(parent.context).inflate(R.layout.item_note, parent, false)
     ) {
-        private val title: TextView = itemView.findViewById(R.id.title)
-        private val subtitle: TextView = itemView.findViewById(R.id.subtitle)
-        fun bind(p: Post) {
-            title.text = p.title
-            subtitle.text = "id=${p.id}, author=${p.authorId} • ${p.body.take(60)}"
+        private val tvTitle: TextView = itemView.findViewById(R.id.title)
+        private val tvSubtitle: TextView = itemView.findViewById(R.id.subtitle)
+        fun bind(p: DomainPost) {
+            tvTitle.text = p.title
+            tvSubtitle.text = "id=${p.id}, author=${p.authorId} • ${p.body.take(60)}"
         }
     }
-    override fun onCreateViewHolder(p: ViewGroup, v: Int) = VH(p)
-    override fun onBindViewHolder(h: VH, pos: Int) = h.bind(getItem(pos))
+
+    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int) = VH(parent)
+    override fun onBindViewHolder(holder: VH, position: Int) = holder.bind(getItem(position))
 }

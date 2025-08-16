@@ -1,6 +1,7 @@
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
+    id("com.google.devtools.ksp") version "2.0.20-1.0.24"
     id("org.jetbrains.kotlin.plugin.serialization") version "2.0.20"
 }
 
@@ -36,6 +37,11 @@ android {
 }
 
 dependencies {
+    // Room
+    implementation("androidx.room:room-runtime:2.6.1")
+    implementation("androidx.room:room-ktx:2.6.1")
+    ksp("androidx.room:room-compiler:2.6.1")
+
     // For module 5
     implementation("androidx.recyclerview:recyclerview:1.3.2")
 

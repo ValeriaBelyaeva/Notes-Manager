@@ -22,8 +22,13 @@ class Repo(context: Context) {
 
     suspend fun loadPost(id: Int): NetResult<PostDto> = safe { api.getPost(id) }
 
-    suspend fun createPost(userId: Int, title: String, body: String): NetResult<PostDto> =
-        safe { api.createPost(NewPostRequest(userId, title, body)) }
+    suspend fun createPost(
+        title: String,
+        body: String,
+        userId: Int = 1
+    ): PostDto {
+        return api.createPost(NewPostRequest(userId = userId, title = title, body = body))
+    }
 
     private suspend inline fun <T> safe(crossinline block: suspend () -> T): NetResult<T> {
         return withContext(Dispatchers.IO) {

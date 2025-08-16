@@ -6,7 +6,7 @@
     android:padding="12dp">
 
     <TextView
-        android:id="@+id/title"
+        android:id="@+id/tvTitle"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:textStyle="bold"
@@ -15,11 +15,21 @@
         android:ellipsize="end" />
 
     <TextView
-        android:id="@+id/subtitle"
+        android:id="@+id/tvTags"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:textSize="12sp"
+        android:alpha="0.75"
+        android:maxLines="1"
+        android:ellipsize="end"
+        android:paddingTop="2dp"/>
+
+    <TextView
+        android:id="@+id/tvBody"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:textSize="13sp"
         android:maxLines="2"
         android:ellipsize="end"
-        android:alpha="0.8" />
+        android:paddingTop="4dp"/>
 </LinearLayout>
