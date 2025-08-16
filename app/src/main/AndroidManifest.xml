@@ -9,6 +9,9 @@
         android:allowBackup="true"
         android:fullBackupContent="@xml/backup_rules"
         android:dataExtractionRules="@xml/data_extraction_rules">
+        <activity
+            android:name=".DomainMainActivity"
+            android:exported="true" />
 
         <activity
             android:name=".MainActivity"
