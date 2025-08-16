@@ -36,6 +36,9 @@ android {
 }
 
 dependencies {
+    // For module 5
+    implementation("androidx.recyclerview:recyclerview:1.3.2")
+
     // AndroidX + Material
     implementation("androidx.core:core-ktx:1.13.1")
     implementation("androidx.appcompat:appcompat:1.7.0")
