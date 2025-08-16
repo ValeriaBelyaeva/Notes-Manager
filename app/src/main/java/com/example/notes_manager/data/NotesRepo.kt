@@ -7,33 +7,52 @@ import com.example.notes_manager.data.api.NotesApi
 import com.example.notes_manager.data.api.toDomain
 import com.example.notes_manager.domain.Post
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.withContext
-import com.example.notes_manager.core.util.retrying
-import com.example.notes_manager.core.util.defaultShouldRetry
 import kotlin.math.ceil
 
+/**
+ * Репозиторий для "заметок".
+ * Есть два режима:
+ *  - pageStream(...) — сначала кэш, потом тихо обновляем сетью (для офлайна)
+ *  - loadPage(...)   — обычная одноразовая загрузка страницы (для твоего Paginator из MainActivity)
+ */
 class NotesRepo(context: Context) {
 
     private val api: NotesApi = RetrofitFactory
         .retrofit(context, "https://jsonplaceholder.typicode.com/")
         .create(NotesApi::class.java)
 
-    suspend fun loadPage(
+    /** Оффлайн-режим: сперва кэш (если есть), затем свежие данные из сети. */
+    fun pageStream(
         page: Int?,
         limit: Int,
         query: String?,
         sort: String?,
         order: String?
-    ): Page<Int, Post> = withContext(Dispatchers.IO) {
+    ): Flow<Page<Int, Post>> = flow {
         val p = page ?: 1
 
-        // Ретраим только сетевые/5xx/429. Модуль 4 не трогаем.
-        val resp = retrying(
-            maxAttempts = 3,
-            initialDelayMs = 200,
-            factor = 2.0,
-            shouldRetry = ::defaultShouldRetry
-        ) {
+        // 1) Тянем кэш без сети (only-if-cached)
+        val cachedResp = withContext(Dispatchers.IO) {
+            api.listNotesCacheOnly(
+                page = p,
+                limit = limit,
+                query = query?.ifBlank { null },
+                sort = sort,
+                order = order
+            )
+        }
+        if (cachedResp.isSuccessful) {
+            val cached = cachedResp.body().orEmpty()
+            if (cached.isNotEmpty()) {
+                emit(Page(cached.map { it.toDomain() }, p + 1))
+            }
+        }
+
+        // 2) Обновление из сети (ETag/304 обслужит OkHttp-кэш)
+        val freshResp = withContext(Dispatchers.IO) {
             api.listNotesResp(
                 page = p,
                 limit = limit,
@@ -43,21 +62,54 @@ class NotesRepo(context: Context) {
             )
         }
 
-        val dtos = resp.body().orEmpty()
-        val totalCount = resp.headers()["X-Total-Count"]?.toIntOrNull()
-
+        val freshDtos = freshResp.body().orEmpty()
+        val total = freshResp.headers()["X-Total-Count"]?.toIntOrNull()
         val next = when {
-            dtos.isEmpty() -> null
-            totalCount != null -> {
-                val maxPage = ceil(totalCount / limit.toDouble()).toInt()
+            freshDtos.isEmpty() -> null
+            total != null -> {
+                val maxPage = ceil(total / limit.toDouble()).toInt()
                 if (p >= maxPage) null else p + 1
             }
             else -> p + 1
         }
 
-        Page(
-            items = dtos.map { it.toDomain() },
-            nextKey = next
+        val cachedIds = cachedResp.body()?.mapNotNull { it.id } ?: emptyList()
+        val freshIds = freshDtos.mapNotNull { it.id }
+        if (cachedIds.isEmpty() || cachedIds != freshIds) {
+            emit(Page(freshDtos.map { it.toDomain() }, next))
+        }
+    }
+
+    /** Совместимость с твоим Paginator: обычная одноразовая загрузка страницы из сети. */
+    suspend fun loadPage(
+        page: Int?,
+        limit: Int,
+        query: String?,
+        sort: String?,
+        order: String?
+    ): Page<Int, Post> = withContext(Dispatchers.IO) {
+        val p = page ?: 1
+
+        val resp = api.listNotesResp(
+            page = p,
+            limit = limit,
+            query = query?.ifBlank { null },
+            sort = sort,
+            order = order
         )
+
+        val dtos = resp.body().orEmpty()
+        val total = resp.headers()["X-Total-Count"]?.toIntOrNull()
+
+        val next = when {
+            dtos.isEmpty() -> null
+            total != null -> {
+                val maxPage = ceil(total / limit.toDouble()).toInt()
+                if (p >= maxPage) null else p + 1
+            }
+            else -> p + 1
+        }
+
+        Page(dtos.map { it.toDomain() }, next)
     }
 }
